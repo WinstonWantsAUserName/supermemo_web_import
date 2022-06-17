@@ -204,11 +204,18 @@ StrReverse(String) {  ; https://www.autohotkey.com/boards/viewtopic.php?t=27215
   if (ClipboardGet_Html(Data)) {
     Html := CleanHTML(data)
     RegExMatch(Html, "s)(?<=<!--StartFragment-->).*(?=<!--EndFragment-->)", Html)
-    clipboard := Html . "<br>#SuperMemo Reference:"
-                 . "<br>#Date: Imported on " . CurrentTime
-                 . "<br>#Source: " . BrowserSource
-                 . "<br>#Link: " . BrowserUrl
-                 . "<br>#Title: " . BrowserTitle
+    if (BrowserSource) {
+      clipboard := Html . "<br>#SuperMemo Reference:"
+                  . "<br>#Date: Imported on " . CurrentTime
+                  . "<br>#Source: " . BrowserSource
+                  . "<br>#Link: " . BrowserUrl
+                  . "<br>#Title: " . BrowserTitle
+    } else {
+      clipboard := Html . "<br>#SuperMemo Reference:"
+                  . "<br>#Date: Imported on " . CurrentTime
+                  . "<br>#Link: " . BrowserUrl
+                  . "<br>#Title: " . BrowserTitle
+    }
     ClipWait
     WinActivate, ahk_class TElWind
     send ^n
