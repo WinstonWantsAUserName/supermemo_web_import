@@ -14,4 +14,4 @@ Features:
 
 To Do:
 
-- check duplicates
+- check duplicates (for now, copying the link and doing ctrl+F search in SuperMemo seem to be the easiest way of checking duplicates)
