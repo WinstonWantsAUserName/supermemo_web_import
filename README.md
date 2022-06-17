@@ -9,9 +9,9 @@ Contact me in Discord (Winston #1395) if you encounter any problems.
 
 Features:
 
--format cleaned
--references included (title, source, link)
+- format cleaned
+- references included (title, source, link)
 
 To Do:
 
--check duplicates
+- check duplicates
