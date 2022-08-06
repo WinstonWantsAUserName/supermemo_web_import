@@ -28,17 +28,19 @@ ClipboardGet_HTML( byref Data ) { ; www.autohotkey.com/forum/viewtopic.php?p=392
 }
 
 CleanHTML(Str) {
-  ; zzz in case you used f6 to remove format before,
-  ; which disables the tag by adding zzz (e.g. <FONT> -> <ZZZFONT>)
-  Str := RegExReplace(Str, "is)( zzz| )style=""((?!BACKGROUND-IMAGE: url).)*?""")
-  Str := RegExReplace(Str, "is)( zzz| )style='((?!BACKGROUND-IMAGE: url).)*?'")
-  Str := RegExReplace(Str, "ism)<\/{0,1}(zzz|)font.*?>")
-  Str := RegExReplace(Str, "is)<BR", "<P")
-  Str := RegExReplace(Str, "i)<H5 dir=ltr align=left>")
-  Str := RegExReplace(Str, "s)src=""file:\/\/\/.*?elements\/", "src=""file:///[PrimaryStorage]")
-  Str := RegExReplace(Str, "i)\/svg\/", "/png/")
-  Str := RegExReplace(Str, "i)\n<P>&nbsp;<\/P>")
-  Return Str
+	; zzz in case you used f6 in SuperMemo to remove format before,
+	; which disables the tag by adding zzz (e.g. <FONT> -> <ZZZFONT>)
+	; Str := RegExReplace(Str, "is)( zzz| )style=(""|')BACKGROUND-IMAGE: url.*?(""|')")
+	Str := RegExReplace(Str, "( zzz| )style=(""|').*?(""|')")
+	Str := RegExReplace(Str, "ism)<\/{0,1}(zzz|)font.*?>")
+	Str := RegExReplace(Str, "i)<P[^>]?+>(<BR>)+<\/P>")
+	; Str := RegExReplace(Str, "is)<BR", "<P")
+	Str := RegExReplace(Str, "i)<H5 dir=ltr align=left>")
+	Str := RegExReplace(Str, "s)src=""file:\/\/\/.*?elements\/", "src=""file:///[PrimaryStorage]")
+	Str := RegExReplace(Str, "i)\/svg\/", "/png/")
+	Str := RegExReplace(Str, "i)<P[^>]?+>&nbsp;<\/P>")
+	Str := RegExReplace(Str, "i)<DIV[^>]+>&nbsp;<\/DIV>")
+	Return Str
 }
 
 StrReverse(String) {  ; https://www.autohotkey.com/boards/viewtopic.php?t=27215
@@ -46,10 +48,12 @@ StrReverse(String) {  ; https://www.autohotkey.com/boards/viewtopic.php?t=27215
 	return String
 }
 
-GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource) {
+GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource, ByRef BrowserDate) {
+	BrowserTitle := BrowserUrl := BrowserSource := BrowserDate := ""
 	ClipSaved := ClipboardAll
 	Clipboard := ""
 	CurrentTick := A_TickCount
+	send {f6}^l  ; for moronic websites that use ctrl+L as a shortcut (I'm looking at you, paratranz)
 	while (!Clipboard) {
 		send ^l^c
 		if (A_TickCount := CurrentTick + 500)
@@ -60,34 +64,81 @@ GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource) {
     if (InStr(BrowserUrl, "youtube.com") && InStr(BrowserUrl, "v=")) {
       RegExMatch(BrowserUrl, "v=\K[\w\-]+", YTLink)
       BrowserUrl := "https://www.youtube.com/watch?v=" . YTLink
-    }
-    WinGetActiveTitle, BrowserTitle
-    BrowserTitle := RegExReplace(BrowserTitle, " - Google Chrome$")
-    BrowserTitle := RegExReplace(BrowserTitle, " — Mozilla Firefox$")
-    BrowserTitle := RegExReplace(BrowserTitle, " - .* - Microsoft​ Edge$")
-    ReversedTitle := StrReverse(BrowserTitle)
-    if (InStr(ReversedTitle, " | ")
-        && (InStr(ReversedTitle, " | ") < InStr(ReversedTitle, " - ")
-            || !InStr(ReversedTitle, " - "))) {  ; used to find source
-      separator := " | "
-    } else if (InStr(ReversedTitle, " - ")) {
-      separator := " - "
-    } else {
-      separator := ""
-    }
-		; occurence := (InStr(ReversedTitle, separator,,, 2) > InStr(ReversedTitle, separator)) ? 2 : 1
-		occurence := 1
-    pos := separator ? InStr(StrReverse(BrowserTitle), separator,,, occurence) : 0
-    if (pos) {
-      BrowserSource := SubStr(BrowserTitle, StrLen(BrowserTitle) - pos - 1, StrLen(BrowserTitle))
-      if (InStr(BrowserSource, separator))
-        BrowserSource := StrReplace(BrowserSource, separator,,, 1)
-      BrowserTitle := SubStr(BrowserTitle, 1, StrLen(BrowserTitle) - pos - 2)
-    }
+    } else if (InStr(BrowserUrl, "bilibili.com/video")) {
+			BrowserUrl := RegExReplace(BrowserUrl, "(\/\?|&)vd_source=.*")
+    } else if (InStr(BrowserUrl, "netflix.com/watch")) {
+			BrowserUrl := RegExReplace(BrowserUrl, "\?trackId=.*")
+		}
+    GetBrowserTitleSourceDate(BrowserUrl, BrowserTitle, BrowserSource, BrowserDate)
 	}
-	send {f6 2}
+	if (WinActive("ahk_exe msedge.exe")) {
+		send ^l{f6}
+	} else {
+		send ^l+{f6}
+	}
 	Clipboard := ClipSaved
-	Return
+}
+
+GetBrowserTitleSourceDate(BrowserUrl, ByRef BrowserTitle, ByRef BrowserSource, ByRef BrowserDate) {
+	WinGetActiveTitle BrowserTitle
+	BrowserTitle := RegExReplace(BrowserTitle, "( - Google Chrome| — Mozilla Firefox|( and [0-9]+ more pages?)? - [^-]+ - Microsoft​ Edge)$")
+	; Sites that need special attention
+	if (InStr(BrowserTitle, "很帅的日报")) {
+		BrowserDate := StrReplace(BrowserTitle, "很帅的日报 ")
+		BrowserTitle := "很帅的日报"
+	} else if (InStr(BrowserTitle, "_百度百科")) {
+		BrowserSource := "百度百科"
+		BrowserTitle := StrReplace(BrowserTitle, "_百度百科")
+	} else if (InStr(BrowserUrl, "reddit.com")) {
+		RegExMatch(BrowserUrl, "reddit\.com\/\Kr\/[^\/]+", BrowserSource)
+		BrowserTitle := StrReplace(BrowserTitle, " : " . StrReplace(BrowserSource, "r/"))
+	; Sites that don't include source in the title
+	} else if (InStr(BrowserUrl, "dailystoic.com")) {
+		BrowserSource := "Daily Stoic"
+	} else if (InStr(BrowserUrl, "healthline.com")) {
+		BrowserSource := "Healthline"
+	} else if (InStr(BrowserUrl, "medicalnewstoday.com")) {
+		BrowserSource := "Medical News Today"
+	; Sites that should be skipped
+	} else if (InStr(BrowserUrl, "mp.weixin.qq.com")) {
+		return
+	} else if (InStr(BrowserUrl, "universityhealthnews.com")) {
+		return
+	; Try to use - or | to find source
+	} else {
+		ReversedTitle := StrReverse(BrowserTitle)
+		if (InStr(ReversedTitle, " | ") && (!InStr(ReversedTitle, " - ") || InStr(ReversedTitle, " | ") < InStr(ReversedTitle, " - "))) {  ; used to find source
+			separator := " | "
+		} else if (InStr(ReversedTitle, " - ")) {
+			separator := " - "
+		} else if (InStr(ReversedTitle, " – ")) {
+			separator := " – "  ; websites like BetterExplained
+		} else {
+			separator := ""
+		}
+		pos := separator ? InStr(StrReverse(BrowserTitle), separator) : 0
+		if (pos) {
+			BrowserSource := SubStr(BrowserTitle, StrLen(BrowserTitle) - pos - 1, StrLen(BrowserTitle))
+			if (InStr(BrowserSource, separator))
+				BrowserSource := StrReplace(BrowserSource, separator,,, 1)
+			BrowserTitle := SubStr(BrowserTitle, 1, StrLen(BrowserTitle) - pos - 2)
+		}
+	}
+}
+
+WaitCaretMove(OriginalX:=0, OriginalY:=0, TimeOut:=5000) {
+	if (!OriginalX)
+		MouseGetPos, OriginalX
+	if (!OriginalY)
+		MouseGetPos,, OriginalY
+	StartTime := A_TickCount
+	loop {
+		if (A_CaretX != OriginalX || A_CaretY != OriginalY) {
+			return true
+		} else if (TimeOut && A_TickCount - StartTime > TimeOut) {
+			return false
+		}
+	}
 }
 
 #If (WinActive("ahk_group Browsers") && WinExist("ahk_class TElWind"))
@@ -95,35 +146,33 @@ GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource) {
 	ReleaseKey("ctrl")
 	ReleaseKey("shift")
   KeyWait alt
-  FormatTime, CurrentTime,, yyyy-MM-dd HH:mm:ss:%A_msec%
+  FormatTime, CurrentTime,, % "yyyy-MM-dd HH:mm:ss:" . A_msec
   ClipSaved := ClipboardAll
-  clipboard := ""
+  LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount  ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
   send ^c
-  ClipWait 0.6
-  if (ErrorLevel) {
+  ClipWait, LongCopy ? 0.6 : 0.2, True
+  if (!Clipboard) {
     send ^a^c
-    clipwait 0.6
-    if (ErrorLevel)
+    ClipWait, LongCopy ? 0.6 : 0.2, True
+    if (!Clipboard)
       Return
   }
-  GetBrowserInfo(BrowserTitle, BrowserUrl, BrowserSource)
-  if (ClipboardGet_Html(Data)) {
-    Html := CleanHTML(data)
-    RegExMatch(Html, "s)(?<=<!--StartFragment-->).*(?=<!--EndFragment-->)", Html)
-    if (BrowserSource) {
-      clipboard := Html . "<br>#SuperMemo Reference:"
-                  . "<br>#Date: Imported on " . CurrentTime
-                  . "<br>#Source: " . BrowserSource
-                  . "<br>#Link: " . BrowserUrl
-                  . "<br>#Title: " . BrowserTitle
-    } else {
-      clipboard := Html . "<br>#SuperMemo Reference:"
-                  . "<br>#Date: Imported on " . CurrentTime
-                  . "<br>#Link: " . BrowserUrl
-                  . "<br>#Title: " . BrowserTitle
-    }
-    ClipWait
+  GetBrowserInfo(BrowserTitle, BrowserUrl, BrowserSource, BrowserDate)
+  if (ClipboardGet_HTML(Data)) {
+    HTML := CleanHTML(data)
+    RegExMatch(HTML, "s)(?<=<!--StartFragment-->).*(?=<!--EndFragment-->)", HTML)
+    source := BrowserSource ? "<br>#Source: " . BrowserSource : ""
+    date := BrowserDate ? "<br>#Date: " . BrowserDate : "<br>#Date: Imported on " . CurrentTime
+    clipboard := HTML
+                . "<br>#SuperMemo Reference:"
+                . "<br>#Link: " . BrowserUrl
+                . source
+                . date
+                . "<br>#Title: " . BrowserTitle
+    ClipWait 10
     WinActivate, ahk_class TElWind
+    send ^{enter}h{enter}  ; clear search highlight, just in case
+    WinWaitActive, ahk_class TElWind,, 0
     send ^n
 		WinWaitNotActive, ahk_class TElWind,, 1.5  ; could appear a loading bar
 		if (!ErrorLevel)
@@ -132,7 +181,10 @@ GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource) {
 		WinWaitNotActive, ahk_class TElWind,, 1.5  ; could appear a loading bar
 		if (!ErrorLevel)
 			WinWaitActive, ahk_class TElWind,, 5
-    send +{home}!t  ; set title
+    MouseGetPos, XCoord, YCoord
+    send +{home}
+    WaitCaretMove(XCoord, YCoord)
+    send !t  ; set title
 		WinWaitNotActive, ahk_class TElWind,, 1.5  ; could appear a loading bar
 		if (!ErrorLevel)
 			WinWaitActive, ahk_class TElWind,, 5
@@ -141,6 +193,8 @@ GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource) {
     WinWaitNotActive, ahk_class TElWind,, 5
     WinKill, ahk_class Notepad
   }
+  BrowserUrl := BrowserTitle := BrowserSource := BrowserDate := ""
+  Vim.State.SetMode("Vim_Normal")
   sleep 700
   clipboard := ClipSaved
 Return
