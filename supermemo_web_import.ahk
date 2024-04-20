@@ -1,200 +1,360 @@
-﻿#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
+﻿#Requires AutoHotkey v1.1.1+  ; so that the editor would recognise this script as AHK V1
+#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
 ; #Warn  ; Enable warnings to assist with detecting common errors.
 SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 
-GroupAdd, Browsers, ahk_exe chrome.exe
-GroupAdd, Browsers, ahk_exe firefox.exe
-GroupAdd, Browsers, ahk_exe msedge.exe  ; Microsoft Edge
+GroupAdd, Browser, ahk_exe chrome.exe
+GroupAdd, Browser, ahk_exe firefox.exe
+GroupAdd, Browser, ahk_exe msedge.exe
 
-ReleaseKey(Key) {
-  if (GetKeyState(Key))
-    send {blind}{l%Key% up}{r%Key% up}
-}
+#Include <lib>
 
-ClipboardGet_HTML( byref Data ) { ; www.autohotkey.com/forum/viewtopic.php?p=392624#392624
-  If CBID := DllCall( "RegisterClipboardFormat", Str,"HTML Format", UInt )
-  If DllCall( "IsClipboardFormatAvailable", UInt,CBID ) <> 0
-    If DllCall( "OpenClipboard", UInt,0 ) <> 0
-    If hData := DllCall( "GetClipboardData", UInt,CBID, UInt )
-        DataL := DllCall( "GlobalSize", UInt,hData, UInt )
-      , pData := DllCall( "GlobalLock", UInt,hData, UInt )
-      , VarSetCapacity( data, dataL * ( A_IsUnicode ? 2 : 1 ) ), StrGet := "StrGet"
-      , A_IsUnicode ? Data := %StrGet%( pData, dataL, 0 )
-                    : DllCall( "lstrcpyn", Str,Data, UInt,pData, UInt,DataL )
-      , DllCall( "GlobalUnlock", UInt,hData )
-  DllCall( "CloseClipboard" )
-  Return dataL ? dataL : 0
-}
+SM := new SM()
+Browser := new Browser()
 
-CleanHTML(Str) {
-	; zzz in case you used f6 in SuperMemo to remove format before,
-	; which disables the tag by adding zzz (e.g. <FONT> -> <ZZZFONT>)
-	; Str := RegExReplace(Str, "is)( zzz| )style=(""|')BACKGROUND-IMAGE: url.*?(""|')")
-	Str := RegExReplace(Str, "( zzz| )style=(""|').*?(""|')")
-	Str := RegExReplace(Str, "ism)<\/{0,1}(zzz|)font.*?>")
-	Str := RegExReplace(Str, "i)<P[^>]?+>(<BR>)+<\/P>")
-	; Str := RegExReplace(Str, "is)<BR", "<P")
-	Str := RegExReplace(Str, "i)<H5 dir=ltr align=left>")
-	Str := RegExReplace(Str, "s)src=""file:\/\/\/.*?elements\/", "src=""file:///[PrimaryStorage]")
-	Str := RegExReplace(Str, "i)\/svg\/", "/png/")
-	Str := RegExReplace(Str, "i)<P[^>]?+>&nbsp;<\/P>")
-	Str := RegExReplace(Str, "i)<DIV[^>]+>&nbsp;<\/DIV>")
-	Return Str
-}
+#if (WinActive("ahk_group Browser"))
+; Incremental web browsing
+^+!b::
+; Import current webpage to SuperMemo
+; Incremental video: Import current YT video to SM
+^+!a::
+^!a::
+  if (!WinExist("ahk_class TElWind")) {
+    SetToolTip("Please open SuperMemo and try again.")
+    return
+  }
+  if (WinExist("ahk_id " . SMImportGuiHwnd)) {
+    WinActivate
+    return
+  }
 
-StrReverse(String) {  ; https://www.autohotkey.com/boards/viewtopic.php?t=27215
-  String .= "", DllCall("msvcrt.dll\_wcsrev", "Ptr", &String, "CDecl")
-	return String
-}
-
-GetBrowserInfo(ByRef BrowserTitle, ByRef BrowserUrl, ByRef BrowserSource, ByRef BrowserDate) {
-	BrowserTitle := BrowserUrl := BrowserSource := BrowserDate := ""
-	ClipSaved := ClipboardAll
-	Clipboard := ""
-	CurrentTick := A_TickCount
-	send {f6}^l  ; for moronic websites that use ctrl+L as a shortcut (I'm looking at you, paratranz)
-	while (!Clipboard) {
-		send ^l^c
-		if (A_TickCount := CurrentTick + 500)
-			Break
-	}
-	If (Clipboard) {
-    BrowserUrl := RegExReplace(Clipboard, "#(.*)$")
-    if (InStr(BrowserUrl, "youtube.com") && InStr(BrowserUrl, "v=")) {
-      RegExMatch(BrowserUrl, "v=\K[\w\-]+", YTLink)
-      BrowserUrl := "https://www.youtube.com/watch?v=" . YTLink
-    } else if (InStr(BrowserUrl, "bilibili.com/video")) {
-			BrowserUrl := RegExReplace(BrowserUrl, "(\/\?|&)vd_source=.*")
-    } else if (InStr(BrowserUrl, "netflix.com/watch")) {
-			BrowserUrl := RegExReplace(BrowserUrl, "\?trackId=.*")
-		}
-    GetBrowserTitleSourceDate(BrowserUrl, BrowserTitle, BrowserSource, BrowserDate)
-	}
-	if (WinActive("ahk_exe msedge.exe")) {
-		send ^l{f6}
-	} else {
-		send ^l+{f6}
-	}
-	Clipboard := ClipSaved
-}
-
-GetBrowserTitleSourceDate(BrowserUrl, ByRef BrowserTitle, ByRef BrowserSource, ByRef BrowserDate) {
-	WinGetActiveTitle BrowserTitle
-	BrowserTitle := RegExReplace(BrowserTitle, "( - Google Chrome| — Mozilla Firefox|( and [0-9]+ more pages?)? - [^-]+ - Microsoft​ Edge)$")
-	; Sites that need special attention
-	if (InStr(BrowserTitle, "很帅的日报")) {
-		BrowserDate := StrReplace(BrowserTitle, "很帅的日报 ")
-		BrowserTitle := "很帅的日报"
-	} else if (InStr(BrowserTitle, "_百度百科")) {
-		BrowserSource := "百度百科"
-		BrowserTitle := StrReplace(BrowserTitle, "_百度百科")
-	} else if (InStr(BrowserUrl, "reddit.com")) {
-		RegExMatch(BrowserUrl, "reddit\.com\/\Kr\/[^\/]+", BrowserSource)
-		BrowserTitle := StrReplace(BrowserTitle, " : " . StrReplace(BrowserSource, "r/"))
-	; Sites that don't include source in the title
-	} else if (InStr(BrowserUrl, "dailystoic.com")) {
-		BrowserSource := "Daily Stoic"
-	} else if (InStr(BrowserUrl, "healthline.com")) {
-		BrowserSource := "Healthline"
-	} else if (InStr(BrowserUrl, "medicalnewstoday.com")) {
-		BrowserSource := "Medical News Today"
-	; Sites that should be skipped
-	} else if (InStr(BrowserUrl, "mp.weixin.qq.com")) {
-		return
-	} else if (InStr(BrowserUrl, "universityhealthnews.com")) {
-		return
-	; Try to use - or | to find source
-	} else {
-		ReversedTitle := StrReverse(BrowserTitle)
-		if (InStr(ReversedTitle, " | ") && (!InStr(ReversedTitle, " - ") || InStr(ReversedTitle, " | ") < InStr(ReversedTitle, " - "))) {  ; used to find source
-			separator := " | "
-		} else if (InStr(ReversedTitle, " - ")) {
-			separator := " - "
-		} else if (InStr(ReversedTitle, " – ")) {
-			separator := " – "  ; websites like BetterExplained
-		} else {
-			separator := ""
-		}
-		pos := separator ? InStr(StrReverse(BrowserTitle), separator) : 0
-		if (pos) {
-			BrowserSource := SubStr(BrowserTitle, StrLen(BrowserTitle) - pos - 1, StrLen(BrowserTitle))
-			if (InStr(BrowserSource, separator))
-				BrowserSource := StrReplace(BrowserSource, separator,,, 1)
-			BrowserTitle := SubStr(BrowserTitle, 1, StrLen(BrowserTitle) - pos - 2)
-		}
-	}
-}
-
-WaitCaretMove(OriginalX:=0, OriginalY:=0, TimeOut:=5000) {
-	if (!OriginalX)
-		MouseGetPos, OriginalX
-	if (!OriginalY)
-		MouseGetPos,, OriginalY
-	StartTime := A_TickCount
-	loop {
-		if (A_CaretX != OriginalX || A_CaretY != OriginalY) {
-			return true
-		} else if (TimeOut && A_TickCount - StartTime > TimeOut) {
-			return false
-		}
-	}
-}
-
-#If (WinActive("ahk_group Browsers") && WinExist("ahk_class TElWind"))
-^+!a::  ; ctrl+shift+alt+a to import to supermemo
-	ReleaseKey("ctrl")
-	ReleaseKey("shift")
-  KeyWait alt
-  FormatTime, CurrentTime,, % "yyyy-MM-dd HH:mm:ss:" . A_msec
   ClipSaved := ClipboardAll
-  LongCopy := A_TickCount, Clipboard := "", LongCopy -= A_TickCount  ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent clipwait will need
-  send ^c
-  ClipWait, LongCopy ? 0.6 : 0.2, True
-  if (!Clipboard) {
-    send ^a^c
-    ClipWait, LongCopy ? 0.6 : 0.2, True
-    if (!Clipboard)
-      Return
+  if (IWB := IfContains(A_ThisLabel, "IWB,^+!b")) {
+    if (!HTMLText := Copy(false, true)) {
+      SetToolTip("Text not found.")
+      Clipboard := ClipSaved
+      return
+    }
   }
-  GetBrowserInfo(BrowserTitle, BrowserUrl, BrowserSource, BrowserDate)
-  if (ClipboardGet_HTML(Data)) {
-    HTML := CleanHTML(data)
-    RegExMatch(HTML, "s)(?<=<!--StartFragment-->).*(?=<!--EndFragment-->)", HTML)
-    source := BrowserSource ? "<br>#Source: " . BrowserSource : ""
-    date := BrowserDate ? "<br>#Date: " . BrowserDate : "<br>#Date: Imported on " . CurrentTime
-    clipboard := HTML
-                . "<br>#SuperMemo Reference:"
-                . "<br>#Link: " . BrowserUrl
-                . source
-                . date
-                . "<br>#Title: " . BrowserTitle
-    ClipWait 10
+
+  Browser.Clear()
+  if (IWB) {
+    Browser.Url := Browser.ParseUrl(RetrieveUrlFromClip())
+  } else {
+    Browser.Url := Browser.GetUrl()
+  }
+  if (!Browser.Url) {
+    SetToolTip("Url not found.")
+    Clipboard := ClipSaved
+    return
+  }
+
+  wBrowser := "ahk_id " . WinActive("A")
+  Browser.FullTitle := Browser.GetFullTitle("A")
+  IsVideoOrAudioSite := Browser.IsVideoOrAudioSite(Browser.FullTitle)
+
+  SM.CloseMsgDialog()
+  CollName := SM.GetCollName()
+  OnlineEl := SM.IsOnline(CollName, -1)
+
+  DupChecked := MB := false
+  if (!IWB) {
+    if (SM.CheckDup(Browser.Url, false))
+      MB := MsgBox(3,, "Continue import?")
+    DupChecked := true
+  }
+  WinClose, % "ahk_class TBrowser ahk_pid " . WinGet("PID", "ahk_class TElWind")
+  WinActivate % wBrowser
+  if (IfIn(MB, "No,Cancel"))
+    Goto SMImportReturn
+
+  Prio := Concept := CloseTab := DLHTML := ResetTimeStamp := CheckDupForIWB := ""
+  Tags := RefComment := ClipBeforeGui := UseOnlineProgress := ""
+  DLList := "economist.com,investopedia.com,webmd.com,britannica.com,medium.com,wired.com"
+  if (IfIn(A_ThisLabel, "^+!a,IWBPriorityAndConcept,^+!b")) {
+    ClipBeforeGui := Clipboard
+    SetDefaultKeyboard(0x0409)  ; English-US
+    Gui, SMImport:Add, Text,, % "Current collection: " . CollName
+    Gui, SMImport:Add, Text,, &Priority:
+    Gui, SMImport:Add, Edit, vPrio w280
+    Gui, SMImport:Add, Text,, Concept &group:  ; like in default import dialog
+    ConceptList := "||Online|Sources|ToDo"
+    if (IfIn(CurrConcept := SM.GetDefaultConcept(), "Online,Sources,ToDo"))
+      ConceptList := StrReplace(ConceptList, "|" . CurrConcept)
+    list := StrLower(CurrConcept . ConceptList)
+    Gui, SMImport:Add, ComboBox, vConcept gAutoComplete w280, % list
+    Gui, SMImport:Add, Text,, &Tags (without # and use `; to separate):
+    Gui, SMImport:Add, Edit, vTags w280
+    Gui, SMImport:Add, Text,, Reference c&omment:
+    Gui, SMImport:Add, Edit, vRefComment w280
+    Gui, SMImport:Add, Checkbox, vCloseTab, &Close tab  ; like in default import dialog
+    if (!IWB && !OnlineEl)
+      Gui, SMImport:Add, Checkbox, vOnlineEl, Import as o&nline element
+    if (!IWB && !IsVideoOrAudioSite && !OnlineEl) {
+      check := IfContains(Browser.Url, DLList) ? "checked" : ""
+      Gui, SMImport:Add, Checkbox, % "vDLHTML " . check, Import fullpage &HTML
+    }
+    if (IWB)
+      Gui, SMImport:Add, Checkbox, vCheckDupForIWB, Check &duplication
+    if (IsVideoOrAudioSite || OnlineEl) {
+      Gui, SMImport:Add, Checkbox, vResetTimeStamp, &Reset time stamp
+      if (IfContains(Browser.Url, "youtube.com/watch")) {
+        check := (CollName = "bgm") ? "checked" : ""
+        Gui, SMImport:Add, Checkbox, % "vUseOnlineProgress " . check, &Mark as use online progress
+      }
+    }
+    Gui, SMImport:Add, Button, default, &Import
+    Gui, SMImport:Show,, SuperMemo Import
+    Gui, SMImport:+HwndSMImportGuiHwnd
+    return
+  } else {
+    DLHTML := IfContains(Browser.Url, DLList)
+  }
+
+SMImportButtonImport:
+  if (A_ThisLabel == "SMImportButtonImport") {
+    ; Without KeyWait Enter SwitchToSameWindow() below could fail???
+    KeyWait Enter
+    KeyWait I
+    Gui, Submit
+    Gui, Destroy
+    if (Clipboard != ClipBeforeGui)
+      ClipSaved := ClipboardAll
+  }
+
+  if (OnlineEl != 1)
+    OnlineEl := SM.IsOnline(CollName, Concept)
+  if (OnlineEl)  ; just in case user checks both of them
+    DLHTML := false
+  if (OnlineEl && IWB) {
+    ret := true
+    if (MsgBox(3,, "You chosed an online concept. Choose again?") = "Yes") {
+      Concept := InputBox(, "Enter a new concept:")
+      if (!ErrorLevel && !SM.IsOnline(-1, Concept))
+        ret := false
+    }
+    if (ret)
+      Goto SMImportReturn
+  }
+
+  SwitchToSameWindow(wBrowser)
+  if (!IWB)  ; IWB copies text before
+    HTMLText := (DLHTML || OnlineEl) ? "" : Copy(false, true)  ; do not copy if download html or online element is checked
+
+  if (CheckDupForIWB) {
+    MB := ""
+    if (SM.CheckDup(Browser.Url, false))
+      MB := MsgBox(3,, "Continue import?")
+    DupChecked := true
+    WinClose, % "ahk_class TBrowser ahk_pid " . WinGet("PID", "ahk_class TElWind")
+    WinActivate % wBrowser
+    if (IfIn(MB, "No,Cancel"))
+      Goto SMImportReturn
+  }
+
+  if (IWB)
+    Browser.Highlight(CollName, Clipboard, Browser.Url)
+
+  if (LocalFile := (Browser.Url ~= "^file:\/\/\/"))
+    DLHTML := true
+  SMCtrlNYT := (!OnlineEl && SM.IsCtrlNYT(Browser.Url))
+  CopyAll := (!HTMLText && !OnlineEl && !DLHTML && !SMCtrlNYT)
+  if (DLHTML) {
+    if (LocalFile) {
+      HTMLText := FileRead(EncodeDecodeURI(RegExReplace(Browser.Url, "^file:\/\/\/"), false))
+      Browser.Url := RegExReplace(Browser.Url, "^file:\/\/\/", "file://")  ; SuperMemo converts file:/// to file://
+    } else {
+      SetToolTip("Attempting to download website...")
+      if (!HTMLText := GetSiteHTML(Browser.Url)) {
+        SetToolTip("Download failed."), CopyAll := true, DLHTML := false
+      } else {
+        ; Fixing links
+        RegExMatch(Browser.Url, "^https?:\/\/.*?\/", UrlHead)
+        RegExMatch(Browser.Url, "^https?:\/\/", HTTP)
+        HTMLText := RegExReplace(HTMLText, "is)<([^<>]+)?\K (href|src)=""\/\/(?=([^<>]+)?>)", " $2=""" . HTTP)
+        HTMLText := RegExReplace(HTMLText, "is)<([^<>]+)?\K (href|src)=""\/(?=([^<>]+)?>)", " $2=""" . UrlHead)
+        HTMLText := RegExReplace(HTMLText, "is)<([^<>]+)?\K (href|src)=""(?=#([^<>]+)?>)", " $2=""" . Browser.Url)
+      }
+    }
+  }
+
+  if (CopyAll) {
+    CopyAll()
+    HTMLText := GetClipHTMLBody()
+  }
+  if (!OnlineEl && !HTMLText && !SMCtrlNYT) {
+    SetToolTip("Text not found.")
+    Goto SMImportReturn
+  }
+
+  SkipDate := (OnlineEl && !IsVideoOrAudioSite && (OnlineEl != 2))
+  Browser.GetInfo(false,, (CopyAll ? Clipboard : ""),, !SkipDate, !ResetTimeStamp, (DLHTML ? HTMLText : ""))
+
+  if (ResetTimeStamp)
+    Browser.TimeStamp := "0:00"
+  if (SkipDate)
+    Browser.Date := ""
+
+  SMPoundSymbHandled := SM.PoundSymbLinkToComment()
+  if (Tags || RefComment) {
+    TagsComment := ""
+    if (Tags) {
+      TagsComment := StrReplace(Trim(Tags), " ", "_")
+      TagsComment := "#" . StrReplace(TagsComment, ";", " #")
+    }
+    if (RefComment && TagsComment)
+      TagsComment := " " . TagsComment 
+    if (Browser.Comment)
+      Browser.Comment := " " . Browser.Comment
+    Browser.Comment := Trim(RefComment) . TagsComment . Browser.Comment
+  }
+
+  WinClip.Clear()
+  if (OnlineEl) {
+    ScriptUrl := Browser.Url
+    if (Browser.TimeStamp && (TimeStampedUrl := Browser.TimeStampToUrl(Browser.Url, Browser.TimeStamp)))
+      ScriptUrl := TimeStampedUrl
+    if (Browser.TimeStamp && !TimeStampedUrl) {
+      Clipboard := "<SPAN class=Highlight>SMVim time stamp</SPAN>: " . Browser.TimeStamp . SM.MakeReference(true)
+    } else if (UseOnlineProgress) {
+      Clipboard := "<SPAN class=Highlight>SMVim: Use online video progress</SPAN>" . SM.MakeReference(true)
+    } else {
+      Clipboard := SM.MakeReference(true)
+    }
+  } else if (SMCtrlNYT) {
+    Clipboard := Browser.Url
+  } else {
+    LineBreakList := "baike.baidu.com,m.shuaifox.com,khanacademy.org,mp.weixin.qq.com,webmd.com,proofwiki.org"
+    LineBreak := IfContains(Browser.Url, LineBreakList)
+    HTMLText := SM.CleanHTML(HTMLText,, LineBreak, Browser.Url)
+    if (!IWB && !Browser.Date)
+      Browser.Date := "Imported on " . GetDetailedTime()
+    Clipboard := HTMLText . SM.MakeReference(true)
+  }
+  ClipWait
+
+  InfoToolTip := "Importing:`n`n"
+               . "Url: " . Browser.Url . "`n"
+               . "Title: " . Browser.Title
+  if (Browser.Source)
+    InfoToolTip .= "`nSource: " . Browser.Source
+  if (Browser.Author)
+    InfoToolTip .= "`nAuthor: " . Browser.Author
+  if (Browser.Date)
+    InfoToolTip .= "`nDate: " . Browser.Date
+  if (Browser.TimeStamp)
+    InfoToolTip .= "`nTime stamp: " . Browser.TimeStamp
+  if (Browser.Comment)
+    InfoToolTip .= "`nComment: " . Browser.Comment
+  SetToolTip(InfoToolTip)
+
+  if (Prio ~= "^\.")
+    Prio := "0" . Prio
+  SM.CloseMsgDialog()
+
+  ChangeBackConcept := ""
+  if (Concept) {
+    if ((OnlineEl == 1) && !SM.IsOnline(-1, Concept))
+      ChangeBackConcept := Concept, Concept := "Online"
+    if (!SM.SetDefaultConcept(Concept,, ChangeBackConcept))
+      Goto SMImportReturn
+  }
+
+  if (SMCtrlNYT) {
+    YT := (RegExMatch(Clipboard, "(?:youtube\.com).*?(?:v=)([a-zA-Z0-9_-]{11})", v) && IsUrl(Clipboard))
+    ; Register browser time stamp to YT comp time stamp
+    if (YT && Browser.TimeStamp) {
+      WinClip.Clear()
+      Clipboard := "{SuperMemoYouTube:" . v1 . "," . Browser.TimeStamp . ",0:00,0:00,3}"
+      ClipWait
+    }
+    SM.CtrlN()
+    if (YT) {
+      Text := Browser.Title . SM.MakeReference()
+      SM.WaitFileLoad()
+      SM.EditFirstQuestion()
+      SM.WaitTextFocus()
+      Send ^a{BS}{Esc}
+      SM.WaitTextExit()
+      Clip(Text,, false)
+      SM.WaitTextFocus()
+      SM.WaitFileLoad()
+    }
+  } else {
+    PrevSMTitle := WinGetTitle("ahk_class TElWind")
+    SM.AltN()
     WinActivate, ahk_class TElWind
-    send ^{enter}h{enter}  ; clear search highlight, just in case
-    WinWaitActive, ahk_class TElWind,, 0
-    send ^n
-		WinWaitNotActive, ahk_class TElWind,, 1.5  ; could appear a loading bar
-		if (!ErrorLevel)
-			WinWaitActive, ahk_class TElWind,, 5
-		send ^a^+1
-		WinWaitNotActive, ahk_class TElWind,, 1.5  ; could appear a loading bar
-		if (!ErrorLevel)
-			WinWaitActive, ahk_class TElWind,, 5
-    MouseGetPos, XCoord, YCoord
-    send +{home}
-    WaitCaretMove(XCoord, YCoord)
-    send !t  ; set title
-		WinWaitNotActive, ahk_class TElWind,, 1.5  ; could appear a loading bar
-		if (!ErrorLevel)
-			WinWaitActive, ahk_class TElWind,, 5
-    send {esc}^+{f6}
-    ; WinWaitActive, ahk_class Notepad,, 5
-    WinWaitNotActive, ahk_class TElWind,, 5
-    WinKill, ahk_class Notepad
+    SM.WaitTextFocus()
+    TempTitle := WinWaitTitleChange(PrevSMTitle, "ahk_class TElWind")
+    SM.PasteHTML()
+
+    if (!OnlineEl) {
+      SM.ExitText()
+      WinWaitTitleChange(TempTitle, "A")
+
+    } else if (OnlineEl) {
+      pidSM := WinGet("PID", "ahk_class TElWind")
+      Send ^t{f9}{Enter}
+      WinWait, % wScript := "ahk_class TScriptEditor ahk_pid " . pidSM,, 5
+      WinActivate, % wBrowser
+      if (ErrorLevel) {
+        SetToolTip("Script component not found.")
+        Goto SMImportReturn
+      }
+
+      ; ControlSetText to "rl" first than send one "u" is needed to update the editor,
+      ; thus prompting it to ask to save on exiting
+      ControlSetText, TMemo1, % "rl " . ScriptUrl, % wScript
+      ControlSend, TMemo1, {text}u, % wScript
+      ControlSend, TMemo1, {Esc}, % wScript
+      WinWait, % "ahk_class TMsgDialog ahk_pid " . pidSM
+      ControlSend, ahk_parent, {Enter}
+      WinWaitClose
+      WinWaitClose, % wScript
+    }
   }
-  BrowserUrl := BrowserTitle := BrowserSource := BrowserDate := ""
-  Vim.State.SetMode("Vim_Normal")
-  sleep 700
-  clipboard := ClipSaved
-Return
+
+  ; All SM operations here are handled in the background
+  SM.SetElParam((IWB ? "" : Browser.Title), Prio, (SMCtrlNYT ? "YouTube" : ""), (ChangeBackConcept ? ChangeBackConcept : ""))
+  if (DupChecked)
+    SM.ClearHighlight()
+  if (!SMPoundSymbHandled)
+    SM.HandleSM19PoundSymbUrl(Browser.Url)
+  SM.Reload()
+  SM.WaitFileLoad()
+  if (ChangeBackConcept)
+    SM.SetDefaultConcept(ChangeBackConcept)
+  if (Tags)
+    SM.LinkConcepts(StrSplit(Tags, ";"),, wBrowser)
+  SM.CloseMsgDialog()
+
+  if (CloseTab) {
+    WinActivate % wBrowser  ; apparently needed for closing tab
+    ControlSend, ahk_parent, {LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Ctrl Down}w{Ctrl Up}, % wBrowser
+  }
+
+SMImportGuiEscape:
+SMImportGuiClose:
+SMImportReturn:
+  EscGui := IfContains(A_ThisLabel, "SMImportGui")
+  if (Esc := IfContains(A_ThisLabel, "SMImportGui,SMImportReturn")) {
+    if (EscGui)
+      Gui, Destroy
+    if (DupChecked)
+      SM.ClearHighlight()
+  }
+  if (OnlineEl || Esc) {
+    Browser.ActivateBrowser(wBrowser)
+  } else {
+    SM.ActivateElWind()
+  }
+  Browser.Clear(), Vim.State.SetMode("Vim_Normal")
+  ; If closed GUI but did not copy anything, restore clipboard
+  ; If closed GUI but copied something while the GUI is open, do not restore clipboard
+  if (!EscGui || (Clipboard == ClipBeforeGui))
+    Clipboard := ClipSaved
+  if (!Esc)
+    SetToolTip("Import completed.")
+  HTMLText := ""  ; empty memory
+return
