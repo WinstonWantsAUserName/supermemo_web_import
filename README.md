@@ -19,4 +19,4 @@ To do:
 
 - make a video about the above feature because it requires extra preparations in SuperMemo
 
-You can support me here: https://www.buymeacoffee.com/winstonwolf
+You can support me here: https://www.buymeacoffee.com/winstonwolf or https://www.paypal.com/paypalme/winstonwolfie
