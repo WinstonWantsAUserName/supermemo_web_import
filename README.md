@@ -10,13 +10,11 @@ Please reload the script (via right clicking the AHK icon on the task bar) if so
 Features:
 
 - format cleaned
-
 - references included (title, link); at some websites (like YouTube) author and date are also included
 
 To do:
 
 - add explanation for video and "online element" import
-
 - make a video about the above feature because it requires extra preparations in SuperMemo
 
-You can support me here: https://www.buymeacoffee.com/winstonwolf or https://www.paypal.com/paypalme/winstonwolfie
+You can support me here: https://www.buymeacoffee.com/winstonwolf or https://www.paypal.com/paypalme/winstonwolfie or https://ko-fi.com/winstonwolf
