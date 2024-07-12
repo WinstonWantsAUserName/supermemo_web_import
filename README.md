@@ -17,4 +17,4 @@ To do:
 - add explanation for video and "online element" import
 - make a video about the above feature because it requires extra preparations in SuperMemo
 
-You can support me here: https://www.buymeacoffee.com/winstonwolf or https://www.paypal.com/paypalme/winstonwolfie or https://ko-fi.com/winstonwolf
+You can support me here: https://ko-fi.com/winstonwolf or https://www.buymeacoffee.com/winstonwolf or https://www.paypal.com/paypalme/winstonwolfie
