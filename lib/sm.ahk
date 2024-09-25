@@ -1,9 +1,12 @@
 #Requires AutoHotkey v1.1.1+  ; so that the editor would recognise this script as AHK V1
 class SM {
   __New() {
-    this.CssClass := "cloze|extract|clozed|hint|note|ignore|headers|RefText"
+    this.CssClass := "cloze|extract|clozed|hint|note|ignore|headers|reftext"
                    . "|reference|highlight|tablelabel|anti-merge|uppercase"
-                   . "|italic|bold|small-caps"
+                   . "|italic|bold|underline|italic-bold|italic-underline"
+                   . "|bold-underline|small-caps|smallcaps"
+                   . "|ilya-frank-translation|overline|italic-overline"
+                   . "|bold-overline|underline-overline"
   }
 
   DoesTextExist(RestoreClip:=true) {
@@ -151,6 +154,16 @@ class SM {
           || (CurrFocus == "TBitBtn9")))
   }
 
+  IsNavigating() {
+    return (this.IsNavigatingPlan()
+         || this.IsNavigatingTask()
+         || this.IsNavigatingContentWind()
+         || this.IsNavigatingBrowser()
+         || WinActive("ahk_class TImgDown")
+         || WinActive("ahk_class TChoicesDlg")
+         || WinActive("ahk_class TChecksDlg"))
+  }
+
   IsNavigatingPlan() {
     return (WinActive("ahk_class TPlanDlg") && (ControlGetFocus() == "TStringGrid1"))
   }
@@ -187,28 +200,36 @@ class SM {
     Vim.State.SetNormal()
   }
 
-  SetPrio(Prio, WinWait:=false, ForceBG:=false) {
-    if (WinActive("ahk_class TElWind") && !ForceBG) {
-      Send !p
-      if (!WinWait) {
-        Send % "{text}" . Prio
-        Send {Enter}
-      } else {
-        WinWaitActive, ahk_class TPriorityDlg
-        ControlSetText, TEdit5, % Prio
-        ControlSend, TEdit5, {Enter}
-      }
-    } else if (WinExist("ahk_class TElWind") || ForceBG) {
+  SetRandInterval(min, max) {
+    Interval := Random(min, max)
+    if (WinActive("ahk_class TElWind")) {
       if (WinGet("ProcessName", "ahk_class TElWind") == "sm19.exe") {
-        this.PostMsg(653, true)
+        this.PostMsg(616, true)
       } else {
-        this.PostMsg(655, true)
+        this.PostMsg(618, true)
       }
-      WinWait, % "ahk_class TPriorityDlg ahk_pid " . WinGet("PID", "ahk_class TElWind")
-      ControlSetText, TEdit5, % Prio
+      WinWait, % "ahk_class TGetIntervalDlg ahk_pid " . WinGet("PID", "ahk_class TElWind")
+      ControlSend, TEdit2, % "{text}" . Interval
       while (WinExist())
-        ControlSend, TEdit5, {Enter}
+        ControlSend, TEdit2, {Enter}
+      global Vim
+      Vim.State.SetNormal()
+    } else if (WinActive("ahk_class TPriorityDlg")) {
+      ControlSetText, TEdit1, % Interval
+      ControlFocus, TEdit5  ; priority
     }
+  }
+
+  SetPrio(Prio) {
+    if (WinGet("ProcessName", "ahk_class TElWind") == "sm19.exe") {
+      this.PostMsg(653, true)
+    } else {
+      this.PostMsg(655, true)
+    }
+    WinWait, % "ahk_class TPriorityDlg ahk_pid " . WinGet("PID", "ahk_class TElWind")
+    ControlSetText, TEdit5, % Prio
+    while (WinExist())
+      ControlSend, TEdit5, {Enter}
   }
 
   SetRandTaskVal(min, max) {
@@ -415,10 +436,15 @@ class SM {
     return Link
   }
 
-  GetLinksInComment(TemplCode:="", RestoreClip:=true) {
+  GetCommentInTemplCode(TemplCode:="", RestoreClip:=true) {
     TemplCode := TemplCode ? TemplCode : this.GetTemplCode(RestoreClip)
     RegExMatch(TemplCode, "(?<=#Comment: ).*?(?=<\/FONT><\/SuperMemoReference>)", Comment)
-    return GetAllLinks(Comment)
+    return Comment
+  }
+
+  GetLinksInComment(TemplCode:="", RestoreClip:=true) {
+    TemplCode := TemplCode ? TemplCode : this.GetTemplCode(RestoreClip)
+    return GetAllLinks(this.GetCommentInTemplCode(TemplCode, RestoreClip))
   }
 
   GetFilePath(RestoreClip:=true) {
@@ -426,7 +452,7 @@ class SM {
       ClipSaved := ClipboardAll
     global WinClip
     LongCopy := A_TickCount, WinClip.Clear(), LongCopy -= A_TickCount  ; LongCopy gauges the amount of time it takes to empty the clipboard which can predict how long the subsequent ClipWait will need
-    this.PostMsg(987, true)
+    this.PostMsg(988, true)  ; sm19.05 changes it from 987 to 988
     ClipWait, % LongCopy ? 0.6 : 0.2, True
     TemplCode := Clipboard
     if (RestoreClip)  ; for scripts that restore clipboard at the end
@@ -701,14 +727,16 @@ class SM {
       WinWait, % wReg := "ahk_class TRegistryForm ahk_pid " . WinGet("PID", "ahk_class TElWind")
 
       if (CheckConceptExist) {
-        this.EnterAndUpdate("Edit1", CheckConceptExist)
-        if (!this.RegCheck(CheckConceptExist,, wReg))
+        this.EnterAndUpdate("Edit1", CheckConceptExist, wReg)
+        ret := this.RegCheck(CheckConceptExist,, wReg)
+        if (ret == "")
           return false
+        UpdateCheckConcept := ret
       }
 
       if (Concept) {  ; set concept
-        this.EnterAndUpdate("Edit1", Concept)
-        if (!this.RegCheck(Concept,, wReg))
+        this.EnterAndUpdate("Edit1", Concept, wReg)
+        if (this.RegCheck(Concept,, wReg) == "")
           return false
       }
 
@@ -732,6 +760,8 @@ class SM {
 
       WinExist(wReg)  ; update last found window
       WinWaitClose
+      if (UpdateCheckConcept)
+        return UpdateCheckConcept
       return (PrevPrio >= 0) ? PrevPrio : true
     }
   }
@@ -764,7 +794,7 @@ class SM {
       this.SetTitle(Title)
       return
     } else if ((Title == "") && (Prio >= 0) && !Template && !Group) {
-      this.SetPrio(Prio,, true)
+      this.SetPrio(Prio)
       return
     }
 
@@ -1005,18 +1035,22 @@ class SM {
     this.PostMsg(778, true)
   }
 
-  AutoPlay() {
+  AutoPlay(Acrobat:=false) {
     this.ActivateElWind(), SetToolTip("Running...")
-    auiaText := this.GetTextArray()
-    Marker := this.GetMarkerFromTextArray(auiaText)
-    Comment := this.GetCommentFromTextArray(auiaText)
+    auiaText := this.GetUIAArray()
+    Marker := this.GetMarkerFromUIAArray(auiaText)
     SMTitle := WinGetTitle("ahk_class TElWind")
 
-    if (SMTitle == "Netflix") {
-      ShellRun(this.GetLinkFromTextArray(auiaText))
+    if (Acrobat) {
+      this.EditFirstQuestion()
+      Send ^t{f9}
+      if (Path := this.GetFilePath())
+        ShellRun("acrobat.exe", Path)
+    } else if (SMTitle == "Netflix") {
+      ShellRun(this.GetLinkFromUIAArray(auiaText))
     } else if (Marker == "SMVim: Use online video progress") {
       global Browser
-      Browser.SearchInYT(SMTitle, this.GetLinkFromTextArray(auiaText))
+      Browser.SearchInYT(SMTitle, this.GetLinkFromUIAArray(auiaText))
     } else {
       Send ^{f10}
       WinWaitActive, ahk_class TMsgDialog,, 0
@@ -1025,7 +1059,7 @@ class SM {
     }
 
     ToolTip := "Running: `n`nTitle: " . SMTitle
-    if (Comment)
+    if (Comment := this.GetCommentFromUIAArray(auiaText))
       ToolTip .= "`nComment: " . Comment
     if (Marker ~= "^SMVim(?!:)") {
       ToolTip .= "`n" . StrUpper(SubStr(Marker, 7, 1)) . SubStr(Marker, 8)
@@ -1040,7 +1074,7 @@ class SM {
         return False
       }
     }
-    WinWaitNotActive, ahk_class TElWind,, 10
+    WinWaitNotActive, ahk_class TElWind
     while (!hReader := WinActive("A"))
       Continue
     wReader := "ahk_id " . hReader
@@ -1072,16 +1106,27 @@ class SM {
 
     } else if (MarkerName = "page mark") {
       if ((WinGetClass(wReader) == "SUMATRA_PDF_FRAME") || (WinGet("ProcessName", wReader) == "WinDjView.exe")) {
-        if (ControlGetText("Edit1", wReader) != MarkerContent) {  ; current page mark
+        if (ControlGetText("Edit1", wReader) != MarkerContent) {  ; target page mark is not current page mark
           if (MsgBox(3,, "Do you want to go to page mark?") = "Yes") {
             ControlFocus, Edit1, % wReader
             ControlSetText, Edit1, % MarkerContent, % wReader
             ControlSend, Edit1, {Enter}, % wReader
           }
         }
+      } else if (Acrobat) {
+        btn := GetAcrobatPageBtn()
+        if (btn.Value != MarkerContent) {  ; target page mark is not current page mark
+          if (MsgBox(3,, "Do you want to go to page mark?") = "Yes") {
+            btn.ControlClick()
+            Sleep 100
+            Send ^a
+            Send % "{text}" . MarkerContent
+            Send {Enter}
+          }
+        }
       }
     } else {
-      SetToolTip(ToolTip)
+      SetToolTip(ToolTip, 5000)
     }
   }
 
@@ -1212,14 +1257,6 @@ class SM {
          || (ControlGet(,, "TMemo2", "ahk_class TElWind") && ControlGet(,, "TMemo1", "ahk_class TElWind")))
   }
 
-  RandCtrlJ(min, max) {
-    Send ^j
-    Send % "{text}" . Random(min, max)
-    Send {Enter 2}
-    global Vim
-    Vim.State.SetNormal()
-  }
-
   ActivateElWind(wSMElWind:="ahk_class TElWind") {
     if (!WinActive(wSMElWind))
       WinActivate, % wSMElWind
@@ -1228,7 +1265,7 @@ class SM {
 
   AskPrio(SetPrio:=true) {
     Prio := InputBox(, "Enter priority:")
-    if (ErrorLevel) {  ; user pressed calcel
+    if (ErrorLevel) {  ; user pressed cancel
       return -1
     } else if (Prio == "") {  ; user pressed enter without entering a priority
       return
@@ -1236,7 +1273,7 @@ class SM {
       if (Prio ~= "^\.")
         Prio := "0" . Prio
       if (SetPrio)
-        this.SetPrio(Prio,, true)
+        this.SetPrio(Prio)
       return Prio
     }
   }
@@ -1330,6 +1367,10 @@ class SM {
   }
 
   GetElNumber(TemplCode:="", RestoreClip:=true) {
+    if (WinExist("ahk_class TElDataWind ahk_pid " . WinGet("PID", "ahk_class TElWind"))) {
+      RegExMatch(WinGetTitle(), "^(Item|Topic|Concept|Task) #([\d,]+):", v)
+      return StrReplace(v2, ",")
+    }
     TemplCode := TemplCode ? TemplCode : this.GetTemplCode(RestoreClip)
     RegExMatch(TemplCode, "Begin Element #(\d+)", v)
     return v1
@@ -1350,7 +1391,7 @@ class SM {
     ; this.ActivateElWind()
     loop {
       ; Send !{f12}kd  ; delete registry link
-      this.PostMsg(935, true)
+      this.PostMsg(936, true)  ; from sm19.05 onward it's 936, before it's 935
       WinWait, % "ahk_class TMsgDialog ahk_pid " . WinGet("PID", "ahk_class TElWind"),, 0.7
       if (!ErrorLevel) {
         ControlSend, ahk_parent, {Enter}
@@ -1376,7 +1417,7 @@ class SM {
     }
   }
 
-  GetTextArray() {
+  GetUIAArray() {
     UIA := UIA_Interface()
     el := UIA.ElementFromHandle(ControlGet(,, "Internet Explorer_Server1", "ahk_class TElWind"))
     if (!Ref := el.FindFirstByName("#SuperMemo Reference:"))  ; item
@@ -1384,24 +1425,32 @@ class SM {
     return el.FindAllByType("text")
   }
 
-  GetLinkFromTextArray(auiaText:="") {
-    auiaText := auiaText ? auiaText : this.GetTextArray()
+  GetLinkFromUIAArray(auiaText:="") {
+    auiaText := auiaText ? auiaText : this.GetUIAArray()
     for i, v in auiaText {
       if (v.Name == "#Link: ")
         return v.FindByPath("+1").Name
     }
   }
 
-  GetCommentFromTextArray(auiaText:="") {
-    auiaText := auiaText ? auiaText : this.GetTextArray()
+  GetCommentFromUIAArray(auiaText:="") {
+    auiaText := auiaText ? auiaText : this.GetUIAArray()
+    Comment := ""
     for i, v in auiaText {
-      if (RegExMatch(v.Name, "^#Comment: (.*)$", v))
-        return v1
+      if (RegExMatch(v.Name, "^#Comment: (.*)$", t)) {
+        Comment .= t1, CommentReached := true
+        Continue
+      }
+      if (CommentReached && !(v.Name ~= "^#(Parent|Article): "))
+        Comment .= v.Name
+      if (v.Name ~= "^#(Parent|Article): ")
+        Break
     }
+    return Comment
   }
 
-  GetMarkerFromTextArray(auiaText:="") {
-    auiaText := auiaText ? auiaText : this.GetTextArray()
+  GetMarkerFromUIAArray(auiaText:="") {
+    auiaText := auiaText ? auiaText : this.GetUIAArray()
     for i, v in auiaText {
       if ((i == 1) && (v.Name == "#SuperMemo Reference:")) {  ; empty html
         return
@@ -1416,7 +1465,7 @@ class SM {
   }
 
   IsHTMLEmpty(auiaText:="") {
-    auiaText := auiaText ? auiaText : this.GetTextArray()
+    auiaText := auiaText ? auiaText : this.GetUIAArray()
     for i, v in auiaText {
       if ((i == 1) && (v.Name == "#SuperMemo Reference:")) {
         return true
@@ -1427,7 +1476,7 @@ class SM {
   }
 
   GetParentElNumber(auiaText:="") {
-    auiaText := auiaText ? auiaText : this.GetTextArray()
+    auiaText := auiaText ? auiaText : this.GetUIAArray()
     for i, v in auiaText {
       if (v.Name == "#Article: ")
         return v.FindByPath("+1").Name
@@ -1466,18 +1515,19 @@ class SM {
     if (Concept) {
       pidSM := WinGet("PID", wSMElWind)
       WinWait, % wReg := "ahk_class TRegistryForm ahk_pid " . pidSM
-      this.EnterAndUpdate("Edit1", Concept)
-      if (!this.RegCheck(Concept, wSMElWind, wReg))
+      this.EnterAndUpdate("Edit1", Concept, wReg)
+      if (this.RegCheck(Concept, wSMElWind, wReg) == "")
         return
       ControlSend, Edit1, {Enter}, % wReg
       loop {
         if (WinExist("ahk_class TMsgDialog ahk_pid " . pidSM)) {
           WinClose
           Break
-        } else if (!WinExist(wRed)) {
+        } else if (!WinExist(wReg)) {
           Break
         }
       }
+      WinWaitClose, % wReg  ; necessary, otherwise the action of wReg closing will activate TElWind
       return true
     }
   }
@@ -1493,11 +1543,17 @@ class SM {
       WinWaitActive, % wReg
       if (IfIn(MB, "No,Cancel")) {
         WinClose
-        return false
+        return
       }
+      this.RegAltR(wReg)
+      WinWait, % "ahk_class TInputDlg ahk_pid " . WinGet("PID", wSMElWind)
+      ret := ControlGetText("TMemo1")
+      WinClose
+      WinExist(wReg)  ; update last found window
+      return ret
     }
     WinExist(wReg)  ; update last found window
-    return true
+    return Text
   }
 
   Cloze() {
@@ -1526,10 +1582,13 @@ class SM {
     if (ret)
       return 1
     wCurr := "ahk_id " . WinActive("A")
+    global Browser
     t := "Link in SM reference is not the same as in the browser. Continue?"
        . "`n(press no to execute a search)"
        . "`nBrowser url: " . BrowserUrl
        . "`n       SM url: " . CurrSMUrl
+       . "`n`nBrowser title: " . Browser.GetFullTitle()
+       . "`n       SM title: " . WinGetTitle(wSMElWind)
     MB := MsgBox(3,, t), ret := 0
     if ((MB = "No") && this.CheckDup(BrowserUrl,, wSMElWind, "Link not found in collection.")) {
       MB := MsgBox(3,, "Found. Continue?")
@@ -1568,9 +1627,11 @@ class SM {
     if (LineBreak)
       str := RegExReplace(str, "i)<(BR|(\/)?DIV)", "<$2P")
 
-    if (IfContains(Url, "economist.com"))
+    if (IfContains(Url, "economist.com")) {
       str := StrReplace(str, "<small", "<small class=uppercase")
+      str := RegExReplace(str, "i)<(\/)?DIV", "<$1P")
       ; str := RegExReplace(str, "is)<\w+\K\s(?=[^>]+font-family: var\(--ds-type-system-.*?-smallcaps\))(?=[^>]+>)", " class=uppercase ")
+    }
 
     ; Ilya Frank
     ; str := RegExReplace(str, "is)<\w+\K\s(?=[^>]+COLOR: green)(?=[^>]+>)", " class=ilya-frank-translation ")
@@ -1579,9 +1640,17 @@ class SM {
     str := RegExReplace(str, "is)<\w+\K\s(?=[^>]+font-style: italic)(?=[^>]+>)", " class=italic ")
     str := RegExReplace(str, "is)<\w+\K\s(?=[^>]+font-weight: bold)(?=[^>]+>)", " class=bold ")
     str := RegExReplace(str, "is)<\w+\K\s(?=[^>]+text-decoration: underline)(?=[^>]+>)", " class=underline ")
+    str := RegExReplace(str, "is)<\w+\K\s(?=[^>]+text-decoration: overline)(?=[^>]+>)", " class=overline ")
+      
+    str := RegExReplace(str, "is)<[^>]+\K\sclass=bold class=italic(?=([^>]+)?>)", " class=italic-bold")
+    str := RegExReplace(str, "is)<[^>]+\K\sclass=underline class=italic(?=([^>]+)?>)", " class=italic-underline")
+    str := RegExReplace(str, "is)<[^>]+\K\sclass=underline class=bold(?=([^>]+)?>)", " class=bold-underline")
+    str := RegExReplace(str, "is)<[^>]+\K\sclass=overline class=italic(?=([^>]+)?>)", " class=italic-overline")
+    str := RegExReplace(str, "is)<[^>]+\K\sclass=overline class=bold(?=([^>]+)?>)", " class=bold-overline")
+    str := RegExReplace(str, "is)<[^>]+\K\sclass=overline class=underline(?=([^>]+)?>)", " class=underline-overline")
 
     ; For Dummies books
-    str := RegExReplace(str, "is)<[^>]+\K\s(zzz)?class=zcheltitalic(?=([^>]+)?>)", " class=italic")
+    ; str := RegExReplace(str, "is)<[^>]+\K\s(zzz)?class=zcheltitalic(?=([^>]+)?>)", " class=italic")
 
     ; Styles and fonts
     str := RegExReplace(str, "is)<[^>]+\K\s(zzz)?style="".*?""(?=([^>]+)?>)")
