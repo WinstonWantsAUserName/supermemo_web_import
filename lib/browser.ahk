@@ -20,7 +20,7 @@ class Browser {
     if (!IfContains(Url, PoundSymbList))
       Url := RegExReplace(Url, "#.*")
     ; Remove everything after "?"
-    QuestionMarkList := "baike.baidu.com,bloomberg.com,substack.com"
+    QuestionMarkList := "baike.baidu.com,bloomberg.com,substack.com,netflix.com/watch"
     if (IfContains(Url, QuestionMarkList)) {
       Url := RegExReplace(Url, "\?.*")
     } else if (IfContains(Url, "youtube.com/watch")) {
@@ -28,8 +28,8 @@ class Browser {
     } else if (IfContains(Url, "bilibili.com")) {
       Url := RegExReplace(Url, "(\?(?!p=\d+)|&).*")
       Url := RegExReplace(Url, "\/(?=\?p=\d+)")
-    } else if (IfContains(Url, "netflix.com/watch")) {
-      Url := RegExReplace(Url, "\?trackId=.*")
+    ; } else if (IfContains(Url, "netflix.com/watch")) {
+    ;   Url := RegExReplace(Url, "\?trackId=.*")
     } else if (IfContains(Url, "finance.yahoo.com")) {
       Url := RegExReplace(Url, "\?.*")
       if !(Url ~= "\/$")
@@ -46,11 +46,8 @@ class Browser {
     if (GetUrl)
       this.Url := this.Url ? this.Url : this.GetUrl()
 
-    ; if (this.Title ~= " - YouTube$")
-    ;   this.Title := RegExReplace(this.Title, "^\(\d+\) ")
-
     ; Sites that should be skipped
-    SkippedList := "wind.com.cn,thepokerbank.com,tutorial.math.lamar.edu"
+    SkippedList := "wind.com.cn,thepokerbank.com,tutorial.math.lamar.edu,sites.google.com/view/musicalharmonysite"
     if (IfContains(this.Url, SkippedList)) {
       return
 
@@ -76,6 +73,8 @@ class Browser {
       this.Author := "Henry George Liddell, Robert Scott", this.Source := "An Intermediate Greek-English Lexicon", this.Title := RegExReplace(this.Title, "^Henry George Liddell, Robert Scott, An Intermediate Greek-English Lexicon, ")
     } else if (RegExMatch(this.Title, "i)^The Project Gutenb(?:e|u)rg eBook of (.*?),? by (.*?)\.?$", v)) {
       this.Author := v2, this.Source := "Project Gutenberg", this.Title := v1
+    } else if (this.Title ~= "^綠角財經筆記: ") {
+      this.Source := "綠角財經筆記", this.Title := RegExReplace(this.Title, "^綠角財經筆記: ")
 
     ; Source at the end
     } else if (this.Title ~= "_百度知道$") {
@@ -128,6 +127,8 @@ class Browser {
       this.Source := "豆瓣", this.Title := RegExReplace(this.Title, " \(豆瓣\)$")
     } else if (IfContains(this.Url, "meta.wikimedia.org")) {
       this.Source := "Meta-Wiki", this.Title := RegExReplace(this.Title, " - Meta$")
+    } else if (this.Title ~= " \| definition of .*? by Medical dictionary$") {
+      this.Source := "The Free Dictionary"
 
     ; Source in the middle
     } else if (RegExMatch(this.Title, " \| (.*) \| Cambridge Core$", v)) {
@@ -221,8 +222,6 @@ class Browser {
       this.Source := "Finty"
     } else if (IfContains(this.Url, "theconversation.com")) {
       this.Source := "The Conversation"
-    } else if (IfContains(this.Url, "thefreedictionary.com")) {
-      this.Source := "The Free Dictionary"
     } else if (IfContains(this.Url, "examine.com")) {
       this.Source := "Examine"
     } else if (IfContains(this.Url, "corporatefinanceinstitute.com")) {
@@ -235,6 +234,8 @@ class Browser {
       this.Source := "Morning Brew"
     } else if (IfContains(this.Url, "aastocks.com")) {
       this.Source := "AASTOCKS"
+    } else if (IfContains(this.Url, "verywellhealth.com")) {
+      this.Source := "Verywell Health"
 
     ; Video/audio
     } else if (IfContains(this.Url, "youtube.com/watch")) {
@@ -254,8 +255,11 @@ class Browser {
             } else {
               btn.Click()
               WinActivate, % "ahk_id " . guiaBrowser.BrowserId
-              Sleep 700
-              Send ^{Home}
+              global ImportCloseTab
+              if (!ImportCloseTab) {
+                Sleep 700
+                Send ^{Home}
+              }
             }
           }
 
@@ -264,7 +268,8 @@ class Browser {
         }
         if (!FullPageText)
           FullPageText := this.GetFullPage(RestoreClip)
-        RegExMatch(FullPageText, "(.*)\r\n\r\n.*\r\n.* subscribers", v), this.Title := v1
+        if (this.Title ~= "^\(\d+\) ")
+          RegExMatch(FullPageText, "(.*)\r\n\r\n.*\r\n.* subscribers", v), this.Title := v1
         if (GetTimeStamp)
           this.TimeStamp := this.GetTimeStamp(this.FullTitle, FullPageText, RestoreClip)
         RegExMatch(FullPageText, ".*(?=\r\n.* subscribers)", Author), this.Author := Author
@@ -350,6 +355,17 @@ class Browser {
       this.Source := "Vimeo", this.Title := RegExReplace(this.Title, " on Vimeo$")
       if (GetFullPage && GetTimeStamp)
         this.TimeStamp := this.GetTimeStamp(this.FullTitle,, RestoreClip)
+    } else if (this.Title ~= " - video Dailymotion$") {
+      this.Source := "Dailymotion", this.Title := RegExReplace(this.Title, " - video Dailymotion$")
+      if (GetFullPage && GetTimeStamp)
+        this.TimeStamp := this.GetTimeStamp(this.FullTitle,, RestoreClip)
+      if (GetFullPage && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip)))) {
+        if (GetDate) {
+          FullPageHTML := FullPageHTML ? FullPageHTML : GetSiteHTML(this.Url ? this.Url : this.GetUrl())
+          RegExMatch(FullPageHTML, "<meta property=""video:release_date"" content=""(\d{4}-\d{2}-\d{2}).*?""  \/>", v), this.Date := v1
+        }
+        RegExMatch(FullPageText, "(.*)\r\n\r\nFollow", v), this.Author := v1
+      }
 
     ; Wikipedia or wiki format websites
     } else if (this.Title ~= " - supermemo\.guru$") {
@@ -376,6 +392,10 @@ class Browser {
       this.Source := "Wiktionary", this.Title := RegExReplace(this.Title, " - Wiktionary, the free dictionary$")
       if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
         RegExMatch(FullPageText, "This page was last edited on (.*?),", v), this.Date := v1
+    } else if (this.Title ~= " - Wikizionario$") {
+      this.Source := "Wikizionario", this.Title := RegExReplace(this.Title, " - Wikizionario$")
+      if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
+        RegExMatch(FullPageText, "Questa pagina è stata modificata per l'ultima volta il (.*?) alle", v), this.Date := v1
     } else if (IfContains(this.Url, "en.wikiversity.org")) {
       this.Source := "Wikiversity", this.Title := RegExReplace(this.Title, " - Wikiversity$")
       if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
@@ -408,6 +428,10 @@ class Browser {
       this.Source := "維基百科", this.Title := RegExReplace(this.Title, " - 維基百科，自由的百科全書$")
       if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
         RegExMatch(FullPageText, "本頁面最後修訂於(.*?) \(", v), this.Date := v1
+    } else if (this.Title ~= " - 維基詞典，自由的多語言詞典$") {
+      this.Source := "維基詞典", this.Title := RegExReplace(this.Title, " - 維基詞典，自由的多語言詞典$")
+      if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
+        RegExMatch(FullPageText, "此頁面最後編輯於 (.*?) \(", v), this.Date := v1
     } else if (this.Title ~= " - 維基百科，自由嘅百科全書$") {
       this.Source := "維基百科", this.Title := RegExReplace(this.Title, " - 維基百科，自由嘅百科全書$")
       if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
@@ -416,6 +440,10 @@ class Browser {
       this.Source := "维基文库", this.Title := RegExReplace(this.Title, " - 维基文库，自由的图书馆$")
       if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
         RegExMatch(FullPageText, "此页面最后编辑于(.*?) \(", v), this.Date := v1
+    } else if (this.Title ~= " - 維基文庫，自由的圖書館$") {
+      this.Source := "維基文庫", this.Title := RegExReplace(this.Title, " - 維基文庫，自由的圖書館$")
+      if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
+        RegExMatch(FullPageText, "此頁面最後編輯於(.*?) \(", v), this.Date := v1
     } else if (this.Title ~= " - 维基词典，自由的多语言词典$") {
       this.Source := "维基词典", this.Title := RegExReplace(this.Title, " - 维基词典，自由的多语言词典$")
       if (GetFullPage && GetDate && (FullPageText || (FullPageText := this.GetFullPage(RestoreClip))))
@@ -495,8 +523,12 @@ class Browser {
         if (GetDate) {
           ; RegExMatch(FullPageText, "Last Updated: (.*) • ", v), this.Date := v1
           RegExMatch(FullPageHTML, "<time datetime="".*?"" >(.*?)<\/time>", v), this.Date := v1
+          if (!this.Date)
+            RegExMatch(GetSiteHTML(this.Url . "/additional-info"), "<td data-type=""date"" class=""text-nowrap"">\s+(.*?)<\/td>", v), this.Date := v1
         }
         RegExMatch(FullPageHTML, "<div class=""editor-title .*?"">(.*?)<\/div>", v), this.Author := v1
+        if (this.Author == "The Editors of Encyclopaedia Britannica")
+          this.Author := ""
       }
     } else if (RegExMatch(this.Title, " \| a podcast by (.*)$", v)) {
       this.Author := v1, this.Source := "PodBean", this.Title := RegExReplace(this.Title, " \| a podcast by (.*)$")
@@ -639,7 +671,7 @@ class Browser {
     ; Return 3 if time stamp can't be in url and ^a doesn't cover time stamp
     } else if (Title ~= "^(Netflix|Watch full .*? english sub \| Kissasian|Watch .*? HD online|Watch Free .*? Full Movies Online|Watch .*? online free on 9anime|Watch .*? Sub/Dub online Free on HiAnime\.to)$") {
       return 3
-    } else if (Title ~= "(-免费在线观看-爱壹帆|_[^_]+ - 喜马拉雅|_高清在线观看 – NO视频| - Animelon| on Vimeo)$") {
+    } else if (Title ~= "(-免费在线观看-爱壹帆|_[^_]+ - 喜马拉雅|_高清在线观看 – NO视频| - Animelon| on Vimeo| - video Dailymotion)$") {
       return 3
     }
   }
@@ -650,7 +682,7 @@ class Browser {
     CollName := CollName ? CollName : SM.GetCollName()
     Sent := False
 
-    if (RegexMatch(PlainText, "(?<!\s)(?<!\d)(\d+,?)+\.", v)) {
+    if (RegexMatch(PlainText, "(?<!\s)(?<!\d)(\d+,?)+\.$", v)) {
       if (Sent := IfContains(Url := Url ? Url : this.GetUrl(), "fr.wikipedia.org"))
         Send % "+{Left " . StrLen(v) . "}"
     }
@@ -660,8 +692,8 @@ class Browser {
         Send % "+{Left " . StrLen(v) . "}"
     }
 
-    if (!Sent && RegexMatch(PlainText, "(\[(\d+|note \d+|citation needed)\])+。?$|\[\d+\]: \d+。?$|(?<=\.)\d+$", v)) {
-      if (Sent := IfContains(Url ? Url : this.GetUrl(), "wikipedia.org"))
+    if (!Sent && RegexMatch(PlainText, "(\[(\d+|note \d+|citation needed)\])+(。|.)?$|\[\d+\]: \d+(。|.)?$|(?<=\.)\d+$", v)) {
+      if (Sent := IfContains(Url ? Url : this.GetUrl(), "wikipedia.org,wikiquote.org"))
         Send % "+{Left " . StrLen(v) . "}"
     }
 
