@@ -608,6 +608,7 @@ class Browser {
     global guiaBrowser
     this.GetGuiaBrowser()
     Url := guiaBrowser.GetCurrentURL()
+    Url := EncodeDecodeURI(Url, false)
     return Parsed ? this.ParseUrl(Url) : Url
   }
 
