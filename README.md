@@ -5,7 +5,8 @@ Select text and press `Ctrl + Shift + Alt + A` in the browser (currently support
 
 For incremental web browsing (that is, not importing the whole article but instead highlight on the browser), press `Ctrl + Shift + Alt + B`. You need a highlighter plugin (eg, [Super Simple Highlighter](https://chromewebstore.google.com/detail/super-simple-highlighter/hhlhjgianpocpoppaiihmlpgcoehlhio)) for this to work, and you need to set the highlight shortcut to `Shift + Alt + H`. Video guide: https://www.youtube.com/watch?v=fUOiNeFtVBk
 
-Please reload the script (via right clicking the AHK icon on the task bar) if something went wrong. This script depends on the UIA library and it might not work all the time (eg, not being able to retrieve current page's URL)--reloading mostly does the trick.
+Please reload the script (via right clicking the AHK icon on the task bar) if something went wrong. This script depends on the [UIA library](https://github.com/Descolada/UIAutomation) and it might not work all the time (eg, not being able to retrieve current page's URL)--reloading mostly does the trick. Sometimes clicking in empty spaces in the web page fixes it too.
+
 
 Features:
 
